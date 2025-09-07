@@ -1,0 +1,113 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - 'sv_v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-package:
+
+    runs-on: windows-2022
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ProjectSavanna/setup-sml@v1.2.0
+      with:
+        smlnj-version: '110.99.4'
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    - uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.7.2'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
+        tools: 'tools_qtcreator,qt.tools.qtcreator'
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        vsversion: '2022'
+
+    - name: install-dependencies
+      run: |
+        pip install meson ninja
+        # Install WiX Toolset for MSI creation
+        winget install --id Microsoft.WiXToolset --source winget
+
+    - name: build-win64
+      run: |
+        call deploy\win64\build-64.bat
+      shell: cmd
+
+    - name: build-win32-helpers
+      run: |
+        call deploy\win64\build-32-helpers.bat
+      shell: cmd
+
+    - name: generate-wxs
+      run: |
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "& 'deploy\win64\generate-wxs.ps1'"
+
+    - name: create-msi-package
+      run: |
+        set PATH=%PATH%;"C:\Program Files (x86)\WiX Toolset v3.14\bin"
+        if not exist "C:\Program Files (x86)\WiX Toolset v3.14\bin" (
+          set PATH=%PATH%;"%ProgramFiles%\WiX Toolset v3.14\bin"
+        )
+        candle -v deploy\win64\sonic-visualiser.wxs
+        light -b . -ext WixUIExtension -ext WixUtilExtension -v sonic-visualiser.wixobj
+        del sonic-visualiser.wixobj
+        del sonic-visualiser.wixpdb
+      shell: cmd
+
+    - name: create-portable-zip
+      run: |
+        mkdir sonic-visualiser-portable
+        copy build_win64\sonic-visualiser.exe sonic-visualiser-portable\
+        copy build_win64\vamp-plugin-load-checker.exe sonic-visualiser-portable\
+        copy build_win64\piper-vamp-simple-server.exe sonic-visualiser-portable\
+        copy build_win64\piper-convert.exe sonic-visualiser-portable\
+        copy build_win64\*.dll sonic-visualiser-portable\
+        xcopy build_win64\plugins sonic-visualiser-portable\plugins\ /E /I
+        copy COPYING sonic-visualiser-portable\LICENSE.txt
+        copy README.md sonic-visualiser-portable\
+        powershell Compress-Archive -Path sonic-visualiser-portable -DestinationPath sonic-visualiser-win64-portable.zip
+
+    - name: get-version
+      id: get_version
+      run: |
+        for /f "tokens=3" %%i in ('findstr /r "define SV_VERSION" build_win64\version.h') do set VERSION=%%i
+        set VERSION=%VERSION:"=%
+        echo version=%VERSION%>>%GITHUB_OUTPUT%
+        echo Package version: %VERSION%
+      shell: cmd
+
+    - name: rename-msi
+      run: |
+        move sonic-visualiser.msi sonic-visualiser-${{ steps.get_version.outputs.version }}-win64.msi
+
+    - name: upload-msi-artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sonic-visualiser-${{ steps.get_version.outputs.version }}-win64-msi
+        path: sonic-visualiser-${{ steps.get_version.outputs.version }}-win64.msi
+
+    - name: upload-portable-artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sonic-visualiser-${{ steps.get_version.outputs.version }}-win64-portable
+        path: sonic-visualiser-win64-portable.zip
+
+    - name: create-release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          sonic-visualiser-${{ steps.get_version.outputs.version }}-win64.msi
+          sonic-visualiser-win64-portable.zip
+        draft: true
+        prerelease: ${{ contains(github.ref, 'pre') || contains(github.ref, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -5,25 +5,26 @@ on: [push, pull_request]
 jobs:
   build:
 
-    runs-on: windows-2019
+    runs-on: windows-2022
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: ProjectSavanna/setup-sml@v1.2.0
       with:
         smlnj-version: '110.99.4'
-    - uses: actions/setup-python@v1
+    - uses: actions/setup-python@v4
       with:
         python-version: '3.x'
     - uses: jurplel/install-qt-action@v3
       with:
-        version: '6.6.1'
+        version: '6.7.2'
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
+        tools: 'tools_qtcreator,qt.tools.qtcreator'
     - uses: ilammy/msvc-dev-cmd@v1
       with:
-        vsversion: '2019'
+        vsversion: '2022'
 
     - name: install-meson
       run: pip install meson ninja
@@ -32,16 +33,51 @@ jobs:
       run: ./repoint install
 
     - name: configure
-      run: meson setup build --buildtype release
+      run: meson setup build --buildtype release -Db_lto=true
 
-    - name: copy-qt-etc
+    - name: copy-qt-libraries
       run: |
-          foreach ($lib in 'Core','Gui','Widgets','Network','Xml','Svg','Test') { copy "..\Qt\6.6.1\msvc2019_64\bin\Qt6$lib.dll" build }
-          cp sv-dependency-builds\win64-msvc\lib\libsndfile-1.dll build
+          $qtDir = "..\Qt\6.7.2\msvc2019_64"
+          foreach ($lib in 'Core','Gui','Widgets','Network','Xml','Svg','Test') { 
+            copy "$qtDir\bin\Qt6$lib.dll" build 
+          }
+          
+          # Copy Qt plugins
+          mkdir build\plugins\platforms -Force
+          mkdir build\plugins\styles -Force  
+          mkdir build\plugins\tls -Force
+          
+          copy "$qtDir\plugins\platforms\qdirect2d.dll" build\plugins\platforms\
+          copy "$qtDir\plugins\platforms\qminimal.dll" build\plugins\platforms\
+          copy "$qtDir\plugins\platforms\qoffscreen.dll" build\plugins\platforms\
+          copy "$qtDir\plugins\platforms\qwindows.dll" build\plugins\platforms\
+          copy "$qtDir\plugins\styles\qmodernwindowsstyle.dll" build\plugins\styles\
+          copy "$qtDir\plugins\tls\qopensslbackend.dll" build\plugins\tls\
+          
+          # Copy other required DLLs
+          copy sv-dependency-builds\win64-msvc\lib\libsndfile-1.dll build\
 
     - name: build
       run: ninja -C build
 
     - name: test
       run: meson test -C build
+
+    - name: create-portable-package
+      run: |
+        mkdir sonic-visualiser-win64
+        copy build\sonic-visualiser.exe sonic-visualiser-win64\
+        copy build\vamp-plugin-load-checker.exe sonic-visualiser-win64\
+        copy build\piper-vamp-simple-server.exe sonic-visualiser-win64\
+        copy build\piper-convert.exe sonic-visualiser-win64\
+        copy build\*.dll sonic-visualiser-win64\
+        xcopy build\plugins sonic-visualiser-win64\plugins\ /E /I
+        copy COPYING sonic-visualiser-win64\LICENSE.txt
+        copy README.md sonic-visualiser-win64\
+
+    - name: upload-artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sonic-visualiser-win64
+        path: sonic-visualiser-win64\
       
