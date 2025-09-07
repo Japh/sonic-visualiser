@@ -17,8 +17,8 @@
         "svgui": {
             "vcs": "git",
             "service": "github",
-            "owner": "sonic-visualiser",
-            "branch": "default"
+            "owner": "Japh",
+            "branch": "add-viridis-colour-map"
         },
         "svapp": {
             "vcs": "git",
