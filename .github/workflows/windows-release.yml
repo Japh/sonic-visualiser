@@ -65,12 +65,14 @@ jobs:
     - name: create-portable-zip
       run: |
         mkdir sonic-visualiser-portable
-        copy build_win64\sonic-visualiser.exe sonic-visualiser-portable\
+        copy "build_win64\Sonic Visualiser.exe" sonic-visualiser-portable\
         copy build_win64\vamp-plugin-load-checker.exe sonic-visualiser-portable\
         copy build_win64\piper-vamp-simple-server.exe sonic-visualiser-portable\
         copy build_win64\piper-convert.exe sonic-visualiser-portable\
         copy build_win64\*.dll sonic-visualiser-portable\
-        xcopy build_win64\plugins sonic-visualiser-portable\plugins\ /E /I
+        if (Test-Path "build_win64\plugins") {
+          xcopy build_win64\plugins sonic-visualiser-portable\plugins\ /E /I
+        }
         copy COPYING sonic-visualiser-portable\LICENSE.txt
         copy README.md sonic-visualiser-portable\
         powershell Compress-Archive -Path sonic-visualiser-portable -DestinationPath sonic-visualiser-win64-portable.zip

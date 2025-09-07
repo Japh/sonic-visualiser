@@ -63,17 +63,55 @@ jobs:
     - name: test
       run: meson test -C build
 
+    - name: debug-build-contents
+      run: |
+        echo "Contents of build directory:"
+        dir build
+        echo "Executable files:"
+        dir build\*.exe
+
     - name: create-portable-package
       run: |
         mkdir sonic-visualiser-win64
-        copy build\sonic-visualiser.exe sonic-visualiser-win64\
-        copy build\vamp-plugin-load-checker.exe sonic-visualiser-win64\
-        copy build\piper-vamp-simple-server.exe sonic-visualiser-win64\
-        copy build\piper-convert.exe sonic-visualiser-win64\
+        
+        # Copy main executable (handle both possible names)
+        if (Test-Path "build\Sonic Visualiser.exe") {
+          copy "build\Sonic Visualiser.exe" sonic-visualiser-win64\
+          echo "Copied Sonic Visualiser.exe"
+        } elseif (Test-Path "build\sonic-visualiser.exe") {
+          copy "build\sonic-visualiser.exe" sonic-visualiser-win64\
+          echo "Copied sonic-visualiser.exe"
+        } else {
+          echo "Error: Could not find main executable"
+          dir build\*.exe
+          exit 1
+        }
+        
+        # Copy other executables if they exist
+        if (Test-Path "build\vamp-plugin-load-checker.exe") {
+          copy build\vamp-plugin-load-checker.exe sonic-visualiser-win64\
+        }
+        if (Test-Path "build\piper-vamp-simple-server.exe") {
+          copy build\piper-vamp-simple-server.exe sonic-visualiser-win64\
+        }
+        if (Test-Path "build\piper-convert.exe") {
+          copy build\piper-convert.exe sonic-visualiser-win64\
+        }
+        
+        # Copy DLLs
         copy build\*.dll sonic-visualiser-win64\
-        xcopy build\plugins sonic-visualiser-win64\plugins\ /E /I
+        
+        # Copy plugins if they exist
+        if (Test-Path "build\plugins") {
+          xcopy build\plugins sonic-visualiser-win64\plugins\ /E /I
+        }
+        
+        # Copy documentation
         copy COPYING sonic-visualiser-win64\LICENSE.txt
         copy README.md sonic-visualiser-win64\
+        
+        echo "Package contents:"
+        dir sonic-visualiser-win64
 
     - name: upload-artifacts
       uses: actions/upload-artifact@v4
